@@ -13,8 +13,7 @@ module.exports = {
         type: Sequelize.INTEGER
       },
       phone_number: {
-        type: Sequelize.STRING,
-        unique: true
+        type: Sequelize.STRING
       },
       qty: {
         type: Sequelize.INTEGER

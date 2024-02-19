@@ -1,248 +1,353 @@
-const  { Cart, Product } = require("../models");
+const { Cart, Product } = require("../models");
+const Sequelize = require("sequelize");
 
 const getData = async (req, res) => {
-    const carts = await Cart.findAll({
-        where: {
-            ip: req.ip,
-            status: "ACTIVE",
-        },
-        attributes: ["productId", "qty"]
+  const products = await Product.findAll();
+  const { rows, count } = await Cart.findAndCountAll({
+    where: {
+      ip: req.ip,
+      status: "ACTIVE",
+    },
+  });
+
+  if (count !== 0) {
+    let productId = [];
+    let qty = [];
+    let userProducts = [];
+
+    JSON.parse(JSON.stringify(rows)).map((row) => {
+      productId.push(row.productId);
+      qty.push(row.qty);
     });
 
-    const products = await Product.findAll();
-
-    if(carts !== null) {
-
-        let productId = [];
-        let qty = [];
-        let userProducts = [];
-
-        JSON.parse(JSON.stringify(carts)).map((cart) => {
-            productId.push(cart.productId);
-            qty.push(cart.qty);
-        });
-
-        JSON.parse(JSON.stringify(products)).map((product) => {
-            for(let i = 0; i <= productId.length; i++) {
-                if(product.id === productId[i]){
-                    product.qty -= qty[i];
-                }
-            }
-            userProducts.push(product);
-        });
-
-        return res.json({
-            products: userProducts
-        });
-    }
+    JSON.parse(JSON.stringify(products)).map((product) => {
+      for (let i = 0; i <= productId.length; i++) {
+        if (product.id === productId[i]) {
+          product.qty -= qty[i];
+        }
+      }
+      userProducts.push(product);
+    });
 
     return res.json({
-        products
+      products: userProducts,
     });
-}
-        // console.log(userProducts);
+  }
 
+  return res.json({
+    products,
+  });
+};
 
-        // console.log(productId);
-        // console.log(qty);
-        // console.log(JSON.parse(JSON.stringify(products)));
-                    // console.log(product.qty);
-        // let carts = JSON.parse(JSON.stringify(rows));
-            // console.log(productId.length)
-            // for(let i = 0; i <= productId.length; i++) {
-            //     if(product.id === productId[i]){
-            //         product.qty -= qty[i];
-            //     }
-            //     // console.log(productId[i])
-            // }
-            // if(product.id === productId){
-            //     console.log(productId.length)
-            //     // product.qty -= qty;
-            // }
+const addToCart = async (req, res, next) => {
+  const { id } = req.body;
+  const products = await Product.findByPk(id);
+  const productsCountQty = JSON.parse(JSON.stringify(products.qty));
 
-        // console.log(JSON.parse(JSON.stringify(products)));
+  const { count } = await Cart.findAndCountAll({
+    where: {
+      ip: req.ip,
+      status: "ACTIVE",
+    },
+  });
 
-        // carts.map((cart) => {
-            
-        // });
-        // const products = await Product.findAll({
-        //     where: {
-        //         firstName: { [Op.in]: ["Nathan", "Jane"] },
-        //     },
-        // });
-        // return res.json({
-        //     products
-        // });
+  if (count !== 0) {
+    const { count, rows } = await Cart.findAndCountAll({
+      where: {
+        ip: req.ip,
+        status: "ACTIVE",
+        productId: id,
+      },
+    });
+    let carts = JSON.parse(JSON.stringify(rows));
 
+    if (count !== 0) {
+      let qty = 1;
 
-const addToCart = async(req, res, next) => {
-    const { id } = req.body;
-    const products = await Product.findByPk(id);
-    const productsCountQty = JSON.parse(JSON.stringify(products.qty));
+      carts.map((row) => {
+        qty += row.qty;
+      });
 
-    const ip = await Cart.findAll({
-        where: {
+      if (qty <= productsCountQty) {
+        const data = {
+          qty,
+          ip: req.ip,
+          status: "ACTIVE",
+        };
+        await Cart.update(data, {
+          where: {
+            productId: id,
+            status: "ACTIVE",
+          },
+        });
+
+        const { rows } = await Cart.findAndCountAll({
+          where: {
             ip: req.ip,
             status: "ACTIVE",
-        },
-    });
-
-    if(ip !== null) {
-        const { count, rows } = await Cart.findAndCountAll({
-            where: {
-                ip: req.ip,
-                status: "ACTIVE",
-                productId: id
+          },
+          attributes: ["qty"],
+          include: [
+            {
+              model: Product,
+              attributes: ["img", "name", "price", "qty"],
             },
-            include: [{
-                model: Product,
-                attributes: ["img", "name", "price", "qty"]
-            }]
+          ],
         });
 
         let carts = JSON.parse(JSON.stringify(rows));
 
-        if(count !== 0) {
-            let qty = 1;
-
-            carts.map((row) => {
-                qty += row.qty;
-            });
-
-            if(qty <= productsCountQty) {
-                const data = {
-                    qty,
-                    ip: req.ip,
-                    status: "ACTIVE"
-                }
-                await Cart.update(data, { 
-                    where: {
-                        productId: id
-                    }
-                });
-                return res.json({
-                    "message": "product is update",
-                    "cart": carts
-                });
-            } else {
-                return res.json({
-                    "message": "product is not found",
-                    "cart": carts
-                });
-            }
-
-        } else {
-            const cart = await new Cart();
-            cart.productId = id;
-            cart.qty = 1;
-            cart.ip = req.ip;
-            cart.status = "ACTIVE";
-            cart.save();
-
-            return res.json({
-                "message": "product is new",
-                "cart": carts
-            });
-        }
-    } else {
-        const cart = await new Cart();
-        cart.productId = id;
-        cart.qty = 1;
-        cart.ip = req.ip;
-        cart.status = "ACTIVE";
-        cart.save();
-        
         return res.json({
-            "message": "cart is new",
-            // "cart": carts
+          message: "product is update",
+          cart: carts,
         });
-    } 
-        // const cart = await new Cart();
-        // cart.productId = id;
-        // cart.qty = 1;
-        // cart.ip = req.ip;
-        // cart.status = "ACTIVE";
-        // cart.save();
-        
-        // const cart = await new Cart();
-        // cart.productId = id;
-        // cart.qty = 1;
-        // cart.ip = req.ip;
-        // cart.status = "ACTIVE";
-        // cart.save();
-        // }
-        
-        // const d = JSON.parse(JSON.stringify(ip));
+      } else {
+        const { rows } = await Cart.findAndCountAll({
+          where: {
+            ip: req.ip,
+            status: "ACTIVE",
+          },
+          attributes: ["qty"],
+          include: [
+            {
+              model: Product,
+              attributes: ["img", "name", "price", "qty"],
+            },
+          ],
+        });
 
-        // console.log(cartId);
+        let carts = JSON.parse(JSON.stringify(rows));
 
-        // const cart = await new Cart();
-        // cart.productId = id;
-        // cart.qty = 1;
-        // cart.ip = req.ip;
-        // cart.status = "ACTIVE";
-        // cart.save();
+        return res.json({
+          message: "product is not found",
+          cart: carts,
+        });
+      }
+    } else {
+      const cart = new Cart();
+      cart.productId = id;
+      cart.qty = 1;
+      cart.ip = req.ip;
+      cart.status = "ACTIVE";
+      await cart.save();
 
+      const { rows } = await Cart.findAndCountAll({
+        where: {
+          ip: req.ip,
+          status: "ACTIVE",
+        },
+        attributes: ["qty"],
+        include: [
+          {
+            model: Product,
+            attributes: ["img", "name", "price", "qty"],
+          },
+        ],
+      });
 
+      let carts = JSON.parse(JSON.stringify(rows));
 
-    // const cart = await new Cart();
-    // cart.productId = id;
-    // cart.qty = 1;
-    // cart.ip = req.ip;
-    // cart.status = "ACTIVE";
-    // cart.save();
-    
-    // console.log(JSON.parse(JSON.stringify(cartId)));
+      return res.json({
+        message: "product is new",
+        cart: carts,
+      });
+    }
+  } else {
+    const cart = new Cart();
+    cart.productId = id;
+    cart.qty = 1;
+    cart.ip = req.ip;
+    cart.status = "ACTIVE";
+    await cart.save();
 
-    // if(cartId !== 0) {
+    const { rows } = await Cart.findAndCountAll({
+      where: {
+        ip: req.ip,
+        status: "ACTIVE",
+      },
+      attributes: ["qty"],
+      include: [
+        {
+          model: Product,
+          attributes: ["img", "name", "price", "qty"],
+        },
+      ],
+    });
 
-    // } else {
-    //     const cart = await new Cart();
-    //     cart.product_id = id;
-    //     cart.qty = 1;
-    //     cart.phone_number = 1;
-    //     cart.status = "ACTIVE";
-    //     cart.save();
-    // }
+    let carts = JSON.parse(JSON.stringify(rows));
 
-    // res.json({
-    //     cart
-    // })
+    return res.json({
+      message: "cart is new",
+      cart: carts,
+    });
+  }
 };
 
 const getCart = async (req, res, next) => {
-    let cart = [];
-    let total = 0;
+  let cart = [];
+  let total = 0;
 
-    const carts = await Cart.findAll({
-        where: {
-            ip: req.ip
+  const carts = await Cart.findAll({
+    where: {
+      ip: req.ip,
+      status: "ACTIVE",
+    },
+    attributes: ["id", "qty"],
+    include: [
+      {
+        model: Product,
+        attributes: ["img", "name", "price", "qty"],
+      },
+    ],
+  });
+
+  JSON.parse(JSON.stringify(carts)).map((data) => {
+    data.price = data.qty * data.Product.price;
+    cart.push(data);
+  });
+
+  cart.map((c) => {
+    total += c.price;
+  });
+
+  return res.json({
+    cart,
+    total,
+  });
+};
+
+const removeFromCart = async (req, res, next) => {
+  const { id } = req.body;
+  const { rows, count } = await Cart.findAndCountAll({
+    where: {
+      ip: req.ip,
+      status: "ACTIVE",
+      id,
+    },
+  });
+
+  let carts = JSON.parse(JSON.stringify(rows));
+
+  if (count !== 0) {
+    let qty = 1;
+
+    carts.map((row) => {
+      qty = row.qty - qty;
+    });
+
+    if (qty !== 0) {
+      await Cart.update(
+        {
+          qty,
         },
-        include: [{
+        {
+          where: {
+            id,
+          },
+        }
+      );
+
+      const { rows } = await Cart.findAndCountAll({
+        where: {
+          ip: req.ip,
+          status: "ACTIVE",
+        },
+        attributes: ["qty"],
+        include: [
+          {
             model: Product,
-            attributes: ["img", "name", "price", "qty"]
-        }]
-    });
+            attributes: ["img", "name", "price", "qty"],
+          },
+        ],
+      });
 
-    JSON.parse(JSON.stringify(carts)).map((data) => {
-        data.price = data.qty * data.Product.price;
-        cart.push(data);
-    });
+      let carts = JSON.parse(JSON.stringify(rows));
 
-    cart.map((c) => {
-        total += c.price;
-    })
+      return res.json({
+        message: "reduce from cart",
+        cart: carts,
+      });
+    } else {
+      await Cart.destroy({
+        where: {
+          id,
+        },
+      });
 
+      const { rows } = await Cart.findAndCountAll({
+        where: {
+          ip: req.ip,
+          status: "ACTIVE",
+        },
+        attributes: ["qty"],
+        include: [
+          {
+            model: Product,
+            attributes: ["img", "name", "price", "qty"],
+          },
+        ],
+      });
+
+      let carts = JSON.parse(JSON.stringify(rows));
+
+      return res.json({
+        message: "remove from cart",
+        cart: carts,
+      });
+    }
+  } else {
     return res.json({
-        cart,
-        total
-    })
-}
+      message: "product on cart is not found",
+    });
+  }
+};
+
+const pay = async (req, res, next) => {
+  const { phone_number } = req.body;
+  const { count, rows } = await Cart.findAndCountAll({
+    where: {
+      ip: req.ip,
+      status: "ACTIVE",
+    },
+  });
+
+  let pay = JSON.parse(JSON.stringify(rows));
+
+  if (count !== 0) {
+    pay.map(async (p) => {
+      await Cart.update(
+        {
+          qty: p.qty,
+          ip: p.ip,
+          status: "PAID",
+          phone_number,
+        },
+        {
+          where: {
+            id: p.id,
+          },
+        }
+      );
+      await Product.update(
+        {
+          qty: Sequelize.literal(`qty - ${p.qty}`),
+        },
+        {
+          where: {
+            id: p.productId,
+          },
+        }
+      );
+    });
+  }
+};
 
 const homeController = {
-    getCart,
-    getData,
-    addToCart   
+  getCart,
+  getData,
+  addToCart,
+  removeFromCart,
+  pay,
 };
 
 module.exports = homeController;
